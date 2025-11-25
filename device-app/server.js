@@ -1,0 +1,221 @@
+const express = require('express');
+const axios = require('axios');
+const qrcode = require('qrcode');
+const open = require('open');
+
+const app = express();
+const PORT = process.env.PORT || 4000;
+
+// Configuration
+const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://keycloak:8080';  // URL interne Docker
+const KEYCLOAK_PUBLIC_URL = process.env.KEYCLOAK_PUBLIC_URL || 'http://localhost:8080';  // URL publique pour affichage
+const REALM = process.env.KEYCLOAK_REALM || 'projetcis';
+const CLIENT_ID = process.env.CLIENT_ID || 'devicecis';
+
+// Variables pour stocker l'état du device flow
+let deviceFlowState = null;
+let accessToken = null;
+
+app.set('view engine', 'ejs');
+app.use(express.json());
+
+// Page principale
+app.get('/', async (req, res) => {
+  res.render('device-home', {
+    deviceFlowState,
+    accessToken,
+    keycloakUrl: KEYCLOAK_PUBLIC_URL  // Utiliser l'URL publique pour l'affichage
+  });
+});
+
+// Initier le Device Flow
+app.post('/start-device-flow', async (req, res) => {
+  try {
+    console.log('🚀 Démarrage du Device Flow...');
+    
+    const deviceEndpoint = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/auth/device`;
+    
+    const response = await axios.post(deviceEndpoint, 
+      new URLSearchParams({
+        client_id: CLIENT_ID,
+        scope: 'openid'
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
+
+    deviceFlowState = {
+      device_code: response.data.device_code,
+      user_code: response.data.user_code,
+      verification_uri: response.data.verification_uri,
+      verification_uri_complete: response.data.verification_uri_complete,
+      expires_in: response.data.expires_in,
+      interval: response.data.interval || 5,
+      started_at: Date.now()
+    };
+
+    // Générer le QR code
+    const qrCodeDataUrl = await qrcode.toDataURL(deviceFlowState.verification_uri_complete);
+    deviceFlowState.qr_code = qrCodeDataUrl;
+
+    console.log('✅ Device Flow initié avec succès');
+    console.log(`📱 Code utilisateur: ${deviceFlowState.user_code}`);
+    console.log(`🔗 URL: ${deviceFlowState.verification_uri}`);
+
+    // Démarrer le polling automatique
+    startPolling();
+
+    res.json({
+      success: true,
+      data: {
+        user_code: deviceFlowState.user_code,
+        verification_uri: deviceFlowState.verification_uri,
+        verification_uri_complete: deviceFlowState.verification_uri_complete,
+        qr_code: qrCodeDataUrl,
+        expires_in: deviceFlowState.expires_in
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors du démarrage du Device Flow:', error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data || error.message
+    });
+  }
+});
+
+// Fonction de polling pour vérifier l'autorisation
+async function startPolling() {
+  if (!deviceFlowState) return;
+
+  const tokenEndpoint = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`;
+  const interval = deviceFlowState.interval * 1000; // Convertir en millisecondes
+  
+  const pollInterval = setInterval(async () => {
+    try {
+      console.log('🔄 Vérification de l\'autorisation...');
+      
+      const response = await axios.post(tokenEndpoint,
+        new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+          device_code: deviceFlowState.device_code,
+          client_id: CLIENT_ID
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
+
+      // Autorisation réussie !
+      accessToken = response.data.access_token;
+      console.log('✅ Autorisation accordée ! Token obtenu.');
+      
+      // Récupérer les infos utilisateur
+      const userInfo = await getUserInfo(accessToken);
+      console.log('👤 Utilisateur connecté:', userInfo.email || userInfo.preferred_username);
+      
+      // Arrêter le polling
+      clearInterval(pollInterval);
+      deviceFlowState = null;
+
+    } catch (error) {
+      if (error.response?.data?.error === 'authorization_pending') {
+        console.log('⏳ En attente d\'autorisation...');
+      } else if (error.response?.data?.error === 'slow_down') {
+        console.log('⚠️ Ralentissement demandé par le serveur');
+      } else if (error.response?.data?.error === 'expired_token') {
+        console.log('❌ Le code a expiré');
+        clearInterval(pollInterval);
+        deviceFlowState = null;
+      } else {
+        console.error('❌ Erreur pendant le polling:', error.response?.data || error.message);
+      }
+    }
+  }, interval);
+
+  // Arrêter le polling après expiration
+  setTimeout(() => {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      console.log('⏱️ Polling arrêté (timeout)');
+      deviceFlowState = null;
+    }
+  }, deviceFlowState.expires_in * 1000);
+}
+
+// Récupérer les informations utilisateur
+async function getUserInfo(token) {
+  try {
+    const userInfoEndpoint = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/userinfo`;
+    const response = await axios.get(userInfoEndpoint, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Erreur lors de la récupération des infos utilisateur:', error.message);
+    return null;
+  }
+}
+
+// API pour vérifier le statut
+app.get('/status', async (req, res) => {
+  if (accessToken) {
+    const userInfo = await getUserInfo(accessToken);
+    res.json({
+      authenticated: true,
+      user: userInfo
+    });
+  } else if (deviceFlowState) {
+    res.json({
+      authenticated: false,
+      pending: true,
+      user_code: deviceFlowState.user_code,
+      verification_uri: deviceFlowState.verification_uri
+    });
+  } else {
+    res.json({
+      authenticated: false,
+      pending: false
+    });
+  }
+});
+
+// Déconnexion
+app.post('/logout', (req, res) => {
+  accessToken = null;
+  deviceFlowState = null;
+  console.log('👋 Déconnexion effectuée');
+  res.json({ success: true });
+});
+
+// Ouvrir le navigateur automatiquement (optionnel)
+app.post('/open-browser', async (req, res) => {
+  if (deviceFlowState?.verification_uri_complete) {
+    await open(deviceFlowState.verification_uri_complete);
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ success: false, error: 'Aucun flow en cours' });
+  }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', service: 'device-app' });
+});
+
+// Démarrage du serveur
+app.listen(PORT, () => {
+  console.log(`🖥️  Device App démarrée sur http://localhost:${PORT}`);
+  console.log(`📝 Instructions:`);
+  console.log(`   1. Accédez à http://localhost:${PORT}`);
+  console.log(`   2. Cliquez sur "Démarrer l'authentification"`);
+  console.log(`   3. Suivez les instructions affichées`);
+});
