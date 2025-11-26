@@ -21,7 +21,6 @@
                 </h1>
                 <div style="display: flex; gap: 1rem;">
                     <a href="/" class="btn btn-secondary">
-                        <span class="icon">🏠</span>
                         Retour
                     </a>
                 </div>
@@ -138,6 +137,23 @@
                             ⚠️ Votre session a expiré. Veuillez vous reconnecter.
                         </div>
                         <% } %>
+
+                            <!-- Section de gestion des tokens -->
+                            <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--border);">
+                                <h4 style="margin-bottom: 1rem;">Actions de sécurité</h4>
+                                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                                    <button onclick="revokeTokens()" class="btn btn-logout">
+                                        Révoquer les tokens
+                                    </button>
+                                    <a href="/auth/revoke-and-logout" class="btn"
+                                        style="background: var(--danger); color: white;">
+                                        Révoquer et déconnecter
+                                    </a>
+                                </div>
+                                <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 1rem;">
+                                    La révocation rend immédiatement invalides tous vos tokens actifs.
+                                </p>
+                            </div>
                 </div>
             </div>
         </main>
@@ -145,6 +161,35 @@
         <%- include('../partials/footer') %>
 
             <script src="/js/main.js"></script>
+            <script>
+                // Fonction pour révoquer les tokens via l'API
+                async function revokeTokens() {
+                    if (!confirm('Êtes-vous sûr de vouloir révoquer votre token ?\n\nCela invalidera immédiatement votre session actuelle.')) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch('/auth/revoke', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            alert('Token révoqué avec succès. Vous allez être redirigé vers l\'accueil.');
+                            window.location.href = '/';
+                        } else {
+                            alert('Erreur lors de la révocation: ' + data.error);
+                        }
+                    } catch (error) {
+                        console.error('Erreur:', error);
+                        alert('Erreur de connexion lors de la révocation');
+                    }
+                }
+            </script>
 </body>
 
 </html>

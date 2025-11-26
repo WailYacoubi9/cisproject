@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, refreshTokenIfNeeded } = require('../middleware/auth');
 const router = express.Router();
 
 /**
@@ -15,8 +15,9 @@ router.get('/', (req, res) => {
 /**
  * GET /profile
  * Page de profil utilisateur (protégée)
+ * Le refresh token sera automatiquement vérifié et renouvelé si nécessaire
  */
-router.get('/profile', requireAuth, (req, res) => {
+router.get('/profile', refreshTokenIfNeeded, requireAuth, (req, res) => {
     const userinfo = req.session.userinfo;
     const tokenSet = req.session.tokenSet;
 
@@ -37,7 +38,7 @@ router.get('/profile', requireAuth, (req, res) => {
  * GET /devices
  * Page de gestion des appareils (protégée)
  */
-router.get('/devices', requireAuth, (req, res) => {
+router.get('/devices', refreshTokenIfNeeded, requireAuth, (req, res) => {
     res.render('pages/devices', {
         title: 'Mes Appareils'
     });
