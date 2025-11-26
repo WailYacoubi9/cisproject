@@ -2,13 +2,15 @@ const express = require('express');
 const axios = require('axios');
 const qrcode = require('qrcode');
 const open = require('open');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Configuration
-const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://keycloak:8080';  // URL interne Docker
-const KEYCLOAK_PUBLIC_URL = process.env.KEYCLOAK_PUBLIC_URL || 'http://localhost:8080';  // URL publique pour affichage
+const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';  // Keycloak reste en HTTP
 const REALM = process.env.KEYCLOAK_REALM || 'projetcis';
 const CLIENT_ID = process.env.CLIENT_ID || 'devicecis';
 
@@ -24,7 +26,7 @@ app.get('/', async (req, res) => {
   res.render('device-home', {
     deviceFlowState,
     accessToken,
-    keycloakUrl: KEYCLOAK_PUBLIC_URL  // Utiliser l'URL publique pour l'affichage
+    keycloakUrl: KEYCLOAK_URL
   });
 });
 
@@ -38,7 +40,7 @@ app.post('/start-device-flow', async (req, res) => {
     const response = await axios.post(deviceEndpoint, 
       new URLSearchParams({
         client_id: CLIENT_ID,
-        scope: 'openid'
+        scope: 'openid profile email'
       }),
       {
         headers: {
@@ -93,7 +95,7 @@ async function startPolling() {
   if (!deviceFlowState) return;
 
   const tokenEndpoint = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`;
-  const interval = deviceFlowState.interval * 1000; // Convertir en millisecondes
+  const interval = deviceFlowState.interval * 1000;
   
   const pollInterval = setInterval(async () => {
     try {
@@ -120,6 +122,9 @@ async function startPolling() {
       const userInfo = await getUserInfo(accessToken);
       console.log('👤 Utilisateur connecté:', userInfo.email || userInfo.preferred_username);
       
+      // Notifier la webapp si nécessaire (via webhook ou API)
+      // await notifyWebApp(userInfo);
+      
       // Arrêter le polling
       clearInterval(pollInterval);
       deviceFlowState = null;
@@ -133,8 +138,6 @@ async function startPolling() {
         console.log('❌ Le code a expiré');
         clearInterval(pollInterval);
         deviceFlowState = null;
-      } else {
-        console.error('❌ Erreur pendant le polling:', error.response?.data || error.message);
       }
     }
   }, interval);
@@ -165,7 +168,32 @@ async function getUserInfo(token) {
   }
 }
 
-// API pour vérifier le statut
+// API pour vérifier le statut (pour webapp)
+app.get('/api/status', async (req, res) => {
+  res.header('Access-Control-Allow-Origin', 'https://localhost:3000');
+  
+  if (accessToken) {
+    const userInfo = await getUserInfo(accessToken);
+    res.json({
+      authenticated: true,
+      user: userInfo
+    });
+  } else if (deviceFlowState) {
+    res.json({
+      authenticated: false,
+      pending: true,
+      user_code: deviceFlowState.user_code,
+      verification_uri: deviceFlowState.verification_uri
+    });
+  } else {
+    res.json({
+      authenticated: false,
+      pending: false
+    });
+  }
+});
+
+// Route interne pour webapp
 app.get('/status', async (req, res) => {
   if (accessToken) {
     const userInfo = await getUserInfo(accessToken);
@@ -196,7 +224,7 @@ app.post('/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Ouvrir le navigateur automatiquement (optionnel)
+// Ouvrir le navigateur automatiquement
 app.post('/open-browser', async (req, res) => {
   if (deviceFlowState?.verification_uri_complete) {
     await open(deviceFlowState.verification_uri_complete);
@@ -211,11 +239,26 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', service: 'device-app' });
 });
 
-// Démarrage du serveur
-app.listen(PORT, () => {
-  console.log(`🖥️  Device App démarrée sur http://localhost:${PORT}`);
-  console.log(`📝 Instructions:`);
-  console.log(`   1. Accédez à http://localhost:${PORT}`);
-  console.log(`   2. Cliquez sur "Démarrer l'authentification"`);
-  console.log(`   3. Suivez les instructions affichées`);
-});
+// Démarrage du serveur HTTPS
+try {
+  // Essayer de charger les certificats HTTPS
+  const httpsOptions = {
+    key: fs.readFileSync(path.join(__dirname, 'certs', 'localhost+2-key.pem')),
+    cert: fs.readFileSync(path.join(__dirname, 'certs', 'localhost+2.pem'))
+  };
+
+  https.createServer(httpsOptions, app).listen(PORT, () => {
+    console.log(`🔒 Device App HTTPS démarrée sur https://localhost:${PORT}`);
+    console.log(`📝 Instructions:`);
+    console.log(`   1. Accédez à https://localhost:${PORT}`);
+    console.log(`   2. Cliquez sur "Démarrer l'authentification"`);
+    console.log(`   3. Suivez les instructions affichées`);
+  });
+} catch (error) {
+  // Fallback sur HTTP si pas de certificats
+  console.log('⚠️ Certificats HTTPS non trouvés, démarrage en HTTP...');
+  app.listen(PORT, () => {
+    console.log(`🖥️ Device App HTTP démarrée sur http://localhost:${PORT}`);
+    console.log(`   Pour HTTPS, générez les certificats avec mkcert`);
+  });
+}

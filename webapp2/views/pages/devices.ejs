@@ -39,7 +39,66 @@
                 <div class="info-box">
                     <div class="info-icon">🚧</div>
                     <div class="info-content">
-                        <h4>Fonctionnalité en développement</h4>
+                        <% if (typeof deviceStatus !== 'undefined' && deviceStatus) { %>
+                            <div class="card">
+                                <h3 class="card-title">📱 État de l'appareil local</h3>
+                                
+                                <% if (deviceStatus.authenticated) { %>
+                                    <div class="status authenticated" style="background: #d4edda; border: 2px solid #28a745; padding: 15px; border-radius: 5px;">
+                                        <h4>✅ Appareil connecté</h4>
+                                        <p>Utilisateur: <%= deviceStatus.user.email || deviceStatus.user.preferred_username %></p>
+                                        <p>ID: <%= deviceStatus.user.sub %></p>
+                                    </div>
+                                <% } else if (deviceStatus.pending) { %>
+                                    <div class="status pending" style="background: #fef5e7; border: 2px solid #f39c12; padding: 15px; border-radius: 5px;">
+                                        <h4>⏳ Authentification en cours...</h4>
+                                        <p>Code: <strong style="font-size: 1.5rem;"><%= deviceStatus.user_code %></strong></p>
+                                        <p>URL: <%= deviceStatus.verification_uri %></p>
+                                    </div>
+                                <% } else { %>
+                                    <div class="status waiting" style="background: #f0f4f8; border: 2px solid #cbd5e0; padding: 15px; border-radius: 5px;">
+                                        <h4>💤 Aucune authentification active</h4>
+                                        <p>Allez sur <a href="https://localhost:4000" target="_blank">https://localhost:4000</a> pour démarrer</p>
+                                    </div>
+                                <% } %>
+                                
+                                <button onclick="checkDeviceStatus()" class="btn btn-primary" style="margin-top: 15px;">
+                                    🔄 Actualiser le statut
+                                </button>
+                            </div>
+                            
+                            <script>
+                                async function checkDeviceStatus() {
+                                    try {
+                                        const response = await fetch('https://localhost:4000/api/status', {
+                                            mode: 'cors'
+                                        });
+                                        const data = await response.json();
+                                        
+                                        // Recharger la page pour afficher le nouveau statut
+                                        location.reload();
+                                    } catch (error) {
+                                        console.error('Erreur:', error);
+                                        alert('Impossible de contacter device-app. Vérifiez qu\'elle est démarrée sur https://localhost:4000');
+                                    }
+                                }
+                                
+                                // Auto-refresh toutes les 5 secondes si en attente
+                                <% if (deviceStatus && deviceStatus.pending) { %>
+                                setInterval(() => {
+                                    checkDeviceStatus();
+                                }, 5000);
+                                <% } %>
+                            </script>
+                        <% } else { %>
+                            <div class="info-box">
+                                <div class="info-icon">⚠️</div>
+                                <div class="info-content">
+                                    <h4>Device App non disponible</h4>
+                                    <p>Démarrez device-app sur https://localhost:4000 pour gérer les appareils</p>
+                                </div>
+                            </div>
+                        <% } %>
                         <p>Le Device Flow sera implémenté dans la prochaine étape du projet.</p>
                     </div>
                 </div>
