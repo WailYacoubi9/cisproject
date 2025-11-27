@@ -36,71 +36,77 @@
                     Cette section permettra de gérer les appareils connectés à votre compte via le Device Flow OAuth2.
                 </p>
 
-                <div class="info-box">
-                    <div class="info-icon">🚧</div>
-                    <div class="info-content">
-                        <% if (typeof deviceStatus !== 'undefined' && deviceStatus) { %>
-                            <div class="card">
-                                <h3 class="card-title">📱 État de l'appareil local</h3>
-                                
-                                <% if (deviceStatus.authenticated) { %>
-                                    <div class="status authenticated" style="background: #d4edda; border: 2px solid #28a745; padding: 15px; border-radius: 5px;">
-                                        <h4>✅ Appareil connecté</h4>
-                                        <p>Utilisateur: <%= deviceStatus.user.email || deviceStatus.user.preferred_username %></p>
-                                        <p>ID: <%= deviceStatus.user.sub %></p>
+                <% if (devices && devices.length > 0) { %>
+                    <div class="devices-list">
+                        <h3 class="card-title">📱 Appareils connectés</h3>
+                        <p class="card-description" style="margin-bottom: 20px;">
+                            Liste des appareils authentifiés via le Device Flow OAuth2 (récupérés depuis Keycloak).
+                        </p>
+
+                        <% devices.forEach((device, index) => { %>
+                            <% device.sessions.forEach((session, sessionIndex) => { %>
+                                <div class="device-card" style="background: #f0f9ff; border: 2px solid #3b82f6; padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                                    <h4 style="margin: 0 0 15px 0; color: #1e40af; display: flex; align-items: center; gap: 10px;">
+                                        <span style="font-size: 1.5rem;">💻</span>
+                                        Device #<%= (index * device.sessions.length + sessionIndex + 1) %>
+                                    </h4>
+
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                        <div>
+                                            <p style="margin: 5px 0;"><strong>📍 Adresse IP:</strong> <%= session.ipAddress %></p>
+                                            <p style="margin: 5px 0;"><strong>🆔 Session ID:</strong> <code style="background: #e0e7ff; padding: 2px 6px; border-radius: 3px; font-size: 0.85rem;"><%= session.id.substring(0, 20) %>...</code></p>
+                                        </div>
+                                        <div>
+                                            <p style="margin: 5px 0;"><strong>🕐 Connecté le:</strong> <%= new Date(session.started).toLocaleString('fr-FR') %></p>
+                                            <p style="margin: 5px 0;"><strong>⏰ Dernière activité:</strong> <%= new Date(session.lastAccess).toLocaleString('fr-FR') %></p>
+                                        </div>
                                     </div>
-                                <% } else if (deviceStatus.pending) { %>
-                                    <div class="status pending" style="background: #fef5e7; border: 2px solid #f39c12; padding: 15px; border-radius: 5px;">
-                                        <h4>⏳ Authentification en cours...</h4>
-                                        <p>Code: <strong style="font-size: 1.5rem;"><%= deviceStatus.user_code %></strong></p>
-                                        <p>URL: <%= deviceStatus.verification_uri %></p>
-                                    </div>
-                                <% } else { %>
-                                    <div class="status waiting" style="background: #f0f4f8; border: 2px solid #cbd5e0; padding: 15px; border-radius: 5px;">
-                                        <h4>💤 Aucune authentification active</h4>
-                                        <p>Allez sur <a href="https://localhost:4000" target="_blank">https://localhost:4000</a> pour démarrer</p>
-                                    </div>
-                                <% } %>
-                                
-                                <button onclick="checkDeviceStatus()" class="btn btn-primary" style="margin-top: 15px;">
-                                    🔄 Actualiser le statut
-                                </button>
-                            </div>
-                            
-                            <script>
-                                async function checkDeviceStatus() {
-                                    try {
-                                        const response = await fetch('https://localhost:4000/api/status', {
-                                            mode: 'cors'
-                                        });
-                                        const data = await response.json();
-                                        
-                                        // Recharger la page pour afficher le nouveau statut
-                                        location.reload();
-                                    } catch (error) {
-                                        console.error('Erreur:', error);
-                                        alert('Impossible de contacter device-app. Vérifiez qu\'elle est démarrée sur https://localhost:4000');
-                                    }
-                                }
-                                
-                                // Auto-refresh toutes les 5 secondes si en attente
-                                <% if (deviceStatus && deviceStatus.pending) { %>
-                                setInterval(() => {
-                                    checkDeviceStatus();
-                                }, 5000);
-                                <% } %>
-                            </script>
-                        <% } else { %>
-                            <div class="info-box">
-                                <div class="info-icon">⚠️</div>
-                                <div class="info-content">
-                                    <h4>Device App non disponible</h4>
-                                    <p>Démarrez device-app sur https://localhost:4000 pour gérer les appareils</p>
+
+                                    <% if (session.expires) { %>
+                                        <p style="margin: 10px 0 5px 0;"><strong>⌛ Expire le:</strong> <%= new Date(session.expires).toLocaleString('fr-FR') %></p>
+                                    <% } %>
+
+                                    <% if (session.clients && session.clients.length > 0) { %>
+                                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #bfdbfe;">
+                                            <p style="margin: 0 0 8px 0; font-weight: 600; color: #1e40af;">Clients OAuth2:</p>
+                                            <% session.clients.forEach(client => { %>
+                                                <div style="background: white; padding: 8px 12px; border-radius: 5px; margin-bottom: 5px;">
+                                                    <span style="color: #059669; font-weight: 600;">✓ <%= client.clientName || client.clientId %></span>
+                                                    <% if (client.clientId !== client.clientName) { %>
+                                                        <span style="color: #6b7280; font-size: 0.9rem;"> (<code><%= client.clientId %></code>)</span>
+                                                    <% } %>
+                                                </div>
+                                            <% }); %>
+                                        </div>
+                                    <% } %>
                                 </div>
-                            </div>
-                        <% } %>
-                        <p>Le Device Flow sera implémenté dans la prochaine étape du projet.</p>
+                            <% }); %>
+                        <% }); %>
+
+                        <div style="margin-top: 20px; padding: 15px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 5px;">
+                            <p style="margin: 0; color: #166534;">
+                                <strong>✅ Architecture correcte:</strong> Les devices sont récupérés depuis Keycloak Account API
+                                (source unique de vérité). WebApp n'interroge jamais device-app directement.
+                            </p>
+                        </div>
                     </div>
+                <% } else { %>
+                    <div class="info-box">
+                        <div class="info-icon">📵</div>
+                        <div class="info-content">
+                            <h4>Aucun appareil connecté</h4>
+                            <p>Démarrez device-app sur <a href="http://localhost:4000" target="_blank" style="color: #3b82f6; font-weight: 600;">http://localhost:4000</a> et authentifiez-vous pour voir vos appareils ici.</p>
+                            <p style="margin-top: 10px; color: #6b7280; font-size: 0.95rem;">
+                                Les appareils authentifiés via le Device Flow OAuth2 apparaîtront automatiquement dans cette liste.
+                            </p>
+                        </div>
+                    </div>
+                <% } %>
+
+                <div style="margin-top: 20px; text-align: center;">
+                    <button onclick="location.reload()" class="btn btn-primary">
+                        🔄 Actualiser la liste
+                    </button>
                 </div>
             </div>
 

@@ -36,31 +36,49 @@ router.get('/profile', refreshTokenIfNeeded, requireAuth, (req, res) => {
 
 /**
  * GET /devices
- * Page de gestion des appareils avec intégration Device App
+ * Page de gestion des appareils connectés via Keycloak
+ * Architecture correcte: WebApp interroge Keycloak (pas device-app directement)
  */
 router.get('/devices', refreshTokenIfNeeded, requireAuth, async (req, res) => {
-    // Vérifier le statut de device-app
-    let deviceStatus = null;
+    // Récupérer les devices depuis Keycloak Account API
+    let devices = [];
+
     try {
         const axios = require('axios');
-        const https = require('https');
-        
-        // Ignorer les certificats auto-signés en dev
-        const agent = new https.Agent({  
-            rejectUnauthorized: false
-        });
-        
-        const response = await axios.get('https://localhost:4000/api/status', { 
-            httpsAgent: agent 
-        });
-        deviceStatus = response.data;
+        const userToken = req.session.tokenSet.access_token;
+        const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
+        const REALM = process.env.REALM || 'projetcis';
+
+        // Appel à Keycloak Account API pour récupérer les sessions
+        const response = await axios.get(
+            `${KEYCLOAK_URL}/realms/${REALM}/account/sessions/devices`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${userToken}`
+                },
+                timeout: 5000
+            }
+        );
+
+        // Filtrer pour ne garder que les devices (client_id: devicecis)
+        devices = response.data.filter(device =>
+            device.sessions && device.sessions.some(session =>
+                session.clients && session.clients.some(client =>
+                    client.clientId === 'devicecis'
+                )
+            )
+        );
+
+        console.log('✅ Devices récupérés depuis Keycloak:', devices.length);
+
     } catch (error) {
-        console.log('Device-app non accessible:', error.message);
+        console.log('⚠️ Erreur Keycloak Account API:', error.message);
+        // En cas d'erreur, devices reste un tableau vide
     }
 
     res.render('pages/devices', {
         title: 'Mes Appareils',
-        deviceStatus
+        devices: devices
     });
 });
 
