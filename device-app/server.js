@@ -168,6 +168,31 @@ async function getUserInfo(token) {
   }
 }
 
+// Route interne pour l'UI du device (PAS pour webapp externe)
+// Cette route est utilisée par le frontend du device pour afficher son état
+app.get('/status', async (req, res) => {
+  if (accessToken) {
+    const userInfo = await getUserInfo(accessToken);
+    res.json({
+      authenticated: true,
+      pending: false,
+      user: userInfo
+    });
+  } else if (deviceFlowState) {
+    res.json({
+      authenticated: false,
+      pending: true,
+      user_code: deviceFlowState.user_code,
+      verification_uri: deviceFlowState.verification_uri
+    });
+  } else {
+    res.json({
+      authenticated: false,
+      pending: false
+    });
+  }
+});
+
 // Déconnexion
 app.post('/logout', (req, res) => {
   accessToken = null;
