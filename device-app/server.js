@@ -168,54 +168,6 @@ async function getUserInfo(token) {
   }
 }
 
-// API pour vérifier le statut (pour webapp)
-app.get('/api/status', async (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://localhost:3000');
-  
-  if (accessToken) {
-    const userInfo = await getUserInfo(accessToken);
-    res.json({
-      authenticated: true,
-      user: userInfo
-    });
-  } else if (deviceFlowState) {
-    res.json({
-      authenticated: false,
-      pending: true,
-      user_code: deviceFlowState.user_code,
-      verification_uri: deviceFlowState.verification_uri
-    });
-  } else {
-    res.json({
-      authenticated: false,
-      pending: false
-    });
-  }
-});
-
-// Route interne pour webapp
-app.get('/status', async (req, res) => {
-  if (accessToken) {
-    const userInfo = await getUserInfo(accessToken);
-    res.json({
-      authenticated: true,
-      user: userInfo
-    });
-  } else if (deviceFlowState) {
-    res.json({
-      authenticated: false,
-      pending: true,
-      user_code: deviceFlowState.user_code,
-      verification_uri: deviceFlowState.verification_uri
-    });
-  } else {
-    res.json({
-      authenticated: false,
-      pending: false
-    });
-  }
-});
-
 // Déconnexion
 app.post('/logout', (req, res) => {
   accessToken = null;
