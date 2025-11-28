@@ -164,7 +164,7 @@
     </div>
 
     <script>
-        let pollingInterval = null;
+        let eventSource = null;
 
         async function startDeviceFlow() {
             try {
@@ -172,12 +172,12 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showAuthorizationInstructions(data.data);
-                    startStatusPolling();
+                    startEventStream();
                 } else {
                     alert('Erreur: ' + data.error);
                 }
@@ -232,25 +232,39 @@
             }
         }
 
-        function startStatusPolling() {
-            if (pollingInterval) clearInterval(pollingInterval);
-            
-            pollingInterval = setInterval(async () => {
-                try {
-                    const response = await fetch('/status');
-                    const data = await response.json();
-                    
-                    if (data.authenticated) {
-                        clearInterval(pollingInterval);
-                        showAuthenticated(data.user);
-                    } else if (!data.pending) {
-                        clearInterval(pollingInterval);
-                        showInitialState();
-                    }
-                } catch (error) {
-                    console.error('Erreur de polling:', error);
+        function startEventStream() {
+            // Fermer l'EventSource existant si présent
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            console.log('📡 Connexion au flux SSE...');
+
+            // Créer une nouvelle connexion EventSource
+            eventSource = new EventSource('/events');
+
+            // Gérer les messages SSE
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('📡 Message SSE reçu:', data);
+
+                if (data.type === 'authenticated') {
+                    eventSource.close();
+                    showAuthenticated(data.user);
+                } else if (data.type === 'expired') {
+                    eventSource.close();
+                    showInitialState();
+                } else if (data.type === 'waiting') {
+                    eventSource.close();
+                    showInitialState();
                 }
-            }, 2000); // Vérifier toutes les 2 secondes
+            };
+
+            // Gérer les erreurs
+            eventSource.onerror = (error) => {
+                console.error('❌ Erreur SSE:', error);
+                eventSource.close();
+            };
         }
 
         function showAuthenticated(user) {
@@ -282,6 +296,12 @@
 
         async function logout() {
             try {
+                // Fermer la connexion SSE
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+
                 await fetch('/logout', { method: 'POST' });
                 location.reload();
             } catch (error) {
@@ -289,24 +309,10 @@
             }
         }
 
-        // Vérifier le statut initial
-        window.onload = async () => {
-            try {
-                const response = await fetch('/status');
-                const data = await response.json();
-                
-                if (data.authenticated) {
-                    showAuthenticated(data.user);
-                } else if (data.pending) {
-                    showAuthorizationInstructions({
-                        user_code: data.user_code,
-                        verification_uri: data.verification_uri
-                    });
-                    startStatusPolling();
-                }
-            } catch (error) {
-                console.error('Erreur:', error);
-            }
+        // Vérifier le statut initial et établir la connexion SSE
+        window.onload = () => {
+            console.log('📡 Démarrage de la connexion SSE...');
+            startEventStream();
         };
     </script>
 </body>
