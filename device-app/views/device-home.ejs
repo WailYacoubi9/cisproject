@@ -164,7 +164,7 @@
     </div>
 
     <script>
-        let pollingInterval = null;
+        let eventSource = null;
 
         async function startDeviceFlow() {
             try {
@@ -172,12 +172,12 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showAuthorizationInstructions(data.data);
-                    startStatusPolling();
+                    // SSE se mettra à jour automatiquement
                 } else {
                     alert('Erreur: ' + data.error);
                 }
@@ -232,25 +232,32 @@
             }
         }
 
-        function startStatusPolling() {
-            if (pollingInterval) clearInterval(pollingInterval);
-            
-            pollingInterval = setInterval(async () => {
-                try {
-                    const response = await fetch('/status');
-                    const data = await response.json();
-                    
-                    if (data.authenticated) {
-                        clearInterval(pollingInterval);
-                        showAuthenticated(data.user);
-                    } else if (!data.pending) {
-                        clearInterval(pollingInterval);
-                        showInitialState();
-                    }
-                } catch (error) {
-                    console.error('Erreur de polling:', error);
+        function startEventStream() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource('/events');
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('📡 SSE reçu:', data);
+
+                if (data.type === 'authenticated') {
+                    showAuthenticated(data.user);
+                } else if (data.type === 'pending') {
+                    // Déjà affiché, rien à faire
+                } else if (data.type === 'expired') {
+                    showInitialState();
+                } else if (data.type === 'waiting') {
+                    showInitialState();
                 }
-            }, 2000); // Vérifier toutes les 2 secondes
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('❌ Erreur SSE:', error);
+                eventSource.close();
+            };
         }
 
         function showAuthenticated(user) {
@@ -289,23 +296,15 @@
             }
         }
 
-        // Vérifier le statut initial
-        window.onload = async () => {
-            try {
-                const response = await fetch('/status');
-                const data = await response.json();
-                
-                if (data.authenticated) {
-                    showAuthenticated(data.user);
-                } else if (data.pending) {
-                    showAuthorizationInstructions({
-                        user_code: data.user_code,
-                        verification_uri: data.verification_uri
-                    });
-                    startStatusPolling();
-                }
-            } catch (error) {
-                console.error('Erreur:', error);
+        // Démarrer le flux SSE au chargement
+        window.onload = () => {
+            startEventStream();
+        };
+
+        // Fermer la connexion SSE quand la page est fermée
+        window.onbeforeunload = () => {
+            if (eventSource) {
+                eventSource.close();
             }
         };
     </script>

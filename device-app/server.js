@@ -18,6 +18,37 @@ const CLIENT_ID = process.env.CLIENT_ID || 'devicecis';
 let deviceFlowState = null;
 let accessToken = null;
 
+// Array pour stocker les clients SSE
+let sseClients = [];
+
+// Fonction pour notifier tous les clients SSE
+function notifyClients(data) {
+  console.log(`📡 Notification SSE à ${sseClients.length} client(s):`, data.type);
+
+  sseClients.forEach(client => {
+    try {
+      client.res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'envoi SSE:', error.message);
+    }
+  });
+}
+
+// Fonction helper pour obtenir l'état actuel
+function getCurrentState() {
+  if (accessToken) {
+    return { type: 'authenticated' };
+  } else if (deviceFlowState) {
+    return {
+      type: 'pending',
+      user_code: deviceFlowState.user_code,
+      verification_uri: deviceFlowState.verification_uri
+    };
+  } else {
+    return { type: 'waiting' };
+  }
+}
+
 app.set('view engine', 'ejs');
 app.use(express.json());
 
@@ -72,6 +103,13 @@ app.post('/start-device-flow', async (req, res) => {
     // Démarrer le polling automatique
     startPolling();
 
+    // Notifier les clients SSE du nouveau code
+    notifyClients({
+      type: 'pending',
+      user_code: deviceFlowState.user_code,
+      verification_uri: deviceFlowState.verification_uri
+    });
+
     res.json({
       success: true,
       data: {
@@ -123,10 +161,10 @@ async function startPolling() {
       // Récupérer les infos utilisateur
       const userInfo = await getUserInfo(accessToken);
       console.log('👤 Utilisateur connecté:', userInfo.email || userInfo.preferred_username);
-      
-      // Notifier la webapp si nécessaire (via webhook ou API)
-      // await notifyWebApp(userInfo);
-      
+
+      // Notifier tous les clients SSE
+      notifyClients({ type: 'authenticated', user: userInfo });
+
       // Arrêter le polling
       clearInterval(pollInterval);
       deviceFlowState = null;
@@ -140,6 +178,7 @@ async function startPolling() {
         console.log('❌ Le code a expiré');
         clearInterval(pollInterval);
         deviceFlowState = null;
+        notifyClients({ type: 'expired' });
       }
     }
   }, interval);
@@ -150,6 +189,7 @@ async function startPolling() {
       clearInterval(pollInterval);
       console.log('⏱️ Polling arrêté (timeout)');
       deviceFlowState = null;
+      notifyClients({ type: 'expired' });
     }
   }, deviceFlowState.expires_in * 1000);
 }
@@ -170,29 +210,29 @@ async function getUserInfo(token) {
   }
 }
 
-// Route interne pour l'UI du device (PAS pour webapp externe)
-// Cette route est utilisée par le frontend du device pour afficher son état
-app.get('/status', async (req, res) => {
-  if (accessToken) {
-    const userInfo = await getUserInfo(accessToken);
-    res.json({
-      authenticated: true,
-      pending: false,
-      user: userInfo
-    });
-  } else if (deviceFlowState) {
-    res.json({
-      authenticated: false,
-      pending: true,
-      user_code: deviceFlowState.user_code,
-      verification_uri: deviceFlowState.verification_uri
-    });
-  } else {
-    res.json({
-      authenticated: false,
-      pending: false
-    });
-  }
+// Route SSE pour les mises à jour en temps réel
+app.get('/events', (req, res) => {
+  console.log('📡 Nouveau client SSE connecté');
+
+  // Configuration SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // Ajouter le client
+  const clientId = Date.now();
+  const newClient = { id: clientId, res };
+  sseClients.push(newClient);
+
+  // Envoyer l'état actuel immédiatement
+  const currentState = getCurrentState();
+  res.write(`data: ${JSON.stringify(currentState)}\n\n`);
+
+  // Gérer la déconnexion
+  req.on('close', () => {
+    console.log('📡 Client SSE déconnecté');
+    sseClients = sseClients.filter(client => client.id !== clientId);
+  });
 });
 
 // Déconnexion
@@ -200,6 +240,7 @@ app.post('/logout', (req, res) => {
   accessToken = null;
   deviceFlowState = null;
   console.log('👋 Déconnexion effectuée');
+  notifyClients({ type: 'waiting' });
   res.json({ success: true });
 });
 

@@ -154,6 +154,37 @@ ${colors.reset}\n`);
     }
   }
 
+  // Test 5b: /status retourne aussi 404 (remplacé par SSE)
+  try {
+    await axios.get(`${DEVICE_URL}/status`, {
+      timeout: 5000
+    });
+    logError('/status existe encore (devrait être supprimé)');
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      logSuccess('/status retourne 404 (remplacé par SSE /events)');
+    } else {
+      logError('/status - erreur inattendue', error);
+    }
+  }
+
+  // Test 5c: /events SSE endpoint accessible
+  try {
+    const response = await axios.get(`${DEVICE_URL}/events`, {
+      timeout: 2000,
+      headers: { 'Accept': 'text/event-stream' },
+      validateStatus: (status) => status === 200
+    });
+    logSuccess('/events SSE endpoint accessible');
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      // Timeout is expected for SSE connections
+      logSuccess('/events SSE endpoint accessible (timeout attendu)');
+    } else {
+      logError('/events SSE endpoint non accessible', error);
+    }
+  }
+
   // Test 6: WebApp - Accès /profile sans auth → redirect
   logSection('TEST 4: WebApp - Authentification requise');
 

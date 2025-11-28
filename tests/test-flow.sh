@@ -100,6 +100,22 @@ else
     test_fail "/api/status devrait retourner 404 mais retourne $HTTP_CODE"
 fi
 
+# Test 4b: /status retourne 404 (remplacé par SSE)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "$DEVICE_URL/status" 2>/dev/null)
+if [ "$HTTP_CODE" == "404" ]; then
+    test_success "/status retourne 404 (remplacé par SSE /events)"
+else
+    test_fail "/status devrait retourner 404 mais retourne $HTTP_CODE"
+fi
+
+# Test 4c: /events SSE endpoint accessible
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 2 -N -H "Accept: text/event-stream" "$DEVICE_URL/events" 2>/dev/null)
+if [ "$HTTP_CODE" == "200" ]; then
+    test_success "/events SSE endpoint accessible (200)"
+else
+    test_fail "/events devrait retourner 200 mais retourne $HTTP_CODE"
+fi
+
 # Test 5: WebApp /activate accessible
 print_section "TEST 3: WebApp - Page d'activation"
 
