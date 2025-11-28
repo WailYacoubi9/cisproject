@@ -258,12 +258,54 @@ app.get('/events', (req, res) => {
 });
 
 // Déconnexion
-app.post('/logout', (req, res) => {
-  accessToken = null;
-  deviceFlowState = null;
-  console.log('👋 Déconnexion effectuée');
-  notifyClients({ type: 'waiting' });
-  res.json({ success: true });
+app.post('/logout', async (req, res) => {
+  try {
+    // Révoquer le token dans Keycloak avant de nettoyer l'état local
+    if (accessToken) {
+      console.log('🔄 Révocation du token dans Keycloak...');
+
+      const revokeEndpoint = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/revoke`;
+
+      try {
+        await axios.post(revokeEndpoint,
+          new URLSearchParams({
+            client_id: CLIENT_ID,
+            token: accessToken,
+            token_type_hint: 'access_token'
+          }),
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            }
+          }
+        );
+        console.log('✅ Token révoqué dans Keycloak');
+      } catch (error) {
+        console.error('⚠️ Erreur lors de la révocation du token:', error.message);
+        // Continue même si la révocation échoue
+      }
+    }
+
+    // Nettoyer l'état local
+    accessToken = null;
+    deviceFlowState = null;
+
+    console.log('👋 Déconnexion effectuée');
+
+    // Notifier les clients SSE
+    notifyClients({ type: 'waiting' });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Erreur lors de la déconnexion:', error.message);
+
+    // Nettoyer l'état local même en cas d'erreur
+    accessToken = null;
+    deviceFlowState = null;
+    notifyClients({ type: 'waiting' });
+
+    res.json({ success: true });
+  }
 });
 
 // Ouvrir le navigateur automatiquement

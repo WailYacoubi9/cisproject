@@ -167,6 +167,34 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Token Revocation Endpoint
+  if (url.includes('/protocol/openid-connect/revoke') && req.method === 'POST') {
+    let body = '';
+
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      const params = new URLSearchParams(body);
+      const token = params.get('token');
+      const clientId = params.get('client_id');
+
+      console.log('🔓 Token revocation request');
+      console.log(`   Client: ${clientId}`);
+      console.log(`   Token: ${token ? token.substring(0, 20) + '...' : 'N/A'}`);
+
+      // Mock revocation - always succeed
+      console.log('✅ Token révoqué (mock)');
+
+      // Return 200 OK (RFC 7009 - revocation always returns 200)
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({}));
+    });
+
+    return;
+  }
+
   // UserInfo Endpoint
   if (url.includes('/protocol/openid-connect/userinfo') && req.method === 'GET') {
     const authHeader = req.headers['authorization'];
@@ -211,6 +239,7 @@ server.listen(PORT, () => {
   console.log(`📋 Available endpoints:`);
   console.log(`   - POST /realms/projetcis/protocol/openid-connect/auth/device`);
   console.log(`   - POST /realms/projetcis/protocol/openid-connect/token`);
+  console.log(`   - POST /realms/projetcis/protocol/openid-connect/revoke`);
   console.log(`   - GET  /realms/projetcis/protocol/openid-connect/userinfo`);
   console.log(`\n⚡ Auto-approval enabled: Device codes will be approved after 5 seconds\n`);
   console.log(`💡 To stop: Press Ctrl+C\n`);
