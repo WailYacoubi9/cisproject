@@ -196,6 +196,45 @@ CLIENT_ID=devicecis
 
 ---
 
+## Running Tests
+
+Tests require **real Keycloak** running (not mock).
+
+### Setup for Tests
+
+```bash
+# 1. Start Keycloak
+docker run -d --name keycloak-dev \
+  -p 8080:8080 \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+  -v $(pwd)/imports:/opt/keycloak/data/import \
+  quay.io/keycloak/keycloak:latest start-dev --import-realm
+
+# 2. Start device-app
+cd device-app
+node server.js
+```
+
+### Run Tests
+
+```bash
+# SSE tests (9 tests)
+node test-sse.js
+
+# Token revocation tests
+node test-logout-revocation.js
+```
+
+Tests will:
+- Connect to device-app on localhost:4000
+- Device-app connects to real Keycloak on localhost:8080
+- Test full OAuth2 Device Flow
+- Test SSE notifications
+- Test token revocation
+
+---
+
 ## Troubleshooting
 
 **Device-app ne démarre pas:**
