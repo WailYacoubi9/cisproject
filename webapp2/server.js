@@ -50,10 +50,12 @@ async function start() {
         // Import des routes (après initialisation de Keycloak)
         const authRoutes = require('./routes/auth');
         const pageRoutes = require('./routes/pages');
+        const deviceActivationRoutes = require('./routes/device-activation');
 
         // Utilisation des routes
         app.use('/', authRoutes);
         app.use('/', pageRoutes);
+        app.use('/', deviceActivationRoutes);
 
         // Gestion des erreurs 404
         app.use((req, res) => {
