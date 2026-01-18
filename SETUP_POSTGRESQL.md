@@ -169,7 +169,9 @@ npm start
 
 1. Va sur `http://localhost:8080`
 2. Connecte-toi avec `admin` / `admin`
-3. Sélectionne realm **`projetcis`**
+3. **Sélectionne le realm `projetcis`:**
+   - En haut à gauche, clique sur le dropdown des realms (affiche "master" par défaut)
+   - Sélectionne **`projetcis`** dans la liste
 4. **Users → Add user**
    - Username: `testuser`
    - Email: `test@example.com`

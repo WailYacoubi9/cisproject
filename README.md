@@ -152,11 +152,20 @@ Identifiants admin :
 
 ## 2. Configuration Keycloak
 
-### 2.1 Création du Realm
+### 2.1 Sélection du Realm
 
-1. Aller dans la sidebar gauche  
-2. Cliquer sur **Manage realms**   
-3. Cliquer sur le realm : **projetcis** pour qu'il devient le realm courant
+Le realm **`projetcis`** a été automatiquement importé grâce au fichier `realm.json`.
+
+Pour le sélectionner :
+
+1. **En haut à gauche** de l'interface Keycloak, cliquez sur le **dropdown des realms** (par défaut il affiche "master")
+2. Dans la liste, sélectionnez **`projetcis`**
+3. Le realm est maintenant actif (vérifié par le nom affiché en haut à gauche)
+
+**Note:** Si le realm `projetcis` n'apparaît pas dans la liste, vérifiez que l'import s'est bien déroulé en consultant les logs Docker :
+```bash
+docker logs keycloak-dev | grep -i import
+```
 
 ---
 
