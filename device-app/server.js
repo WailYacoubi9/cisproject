@@ -169,11 +169,46 @@ async function getUserInfo(token) {
 }
 
 // Déconnexion
-app.post('/logout', (req, res) => {
-  accessToken = null;
-  deviceFlowState = null;
-  console.log('👋 Déconnexion effectuée');
-  res.json({ success: true });
+app.post('/logout', async (req, res) => {
+  try {
+    // Révoquer le token auprès de Keycloak si on en a un
+    if (accessToken) {
+      console.log('🔄 Révocation du token auprès de Keycloak...');
+
+      const revokeEndpoint = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/revoke`;
+
+      await axios.post(revokeEndpoint,
+        new URLSearchParams({
+          client_id: CLIENT_ID,
+          token: accessToken,
+          token_type_hint: 'access_token'
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
+
+      console.log('✅ Token révoqué avec succès');
+    }
+
+    // Nettoyer l'état local
+    accessToken = null;
+    deviceFlowState = null;
+
+    console.log('👋 Déconnexion effectuée');
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error('⚠️ Erreur lors de la révocation du token:', error.response?.data || error.message);
+
+    // Même en cas d'erreur, on nettoie l'état local
+    accessToken = null;
+    deviceFlowState = null;
+
+    res.json({ success: true, warning: 'Token révoqué localement mais erreur avec Keycloak' });
+  }
 });
 
 // Ouvrir le navigateur automatiquement
