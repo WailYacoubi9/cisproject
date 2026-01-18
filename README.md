@@ -34,25 +34,106 @@ Puis déplacer les fichiers générés dedans :
 ```
 /certs est déjà placé dans .gitignore
 
+## Etape préliminaire 2: Configuration de la base de données PostgreSQL pour Keycloak
+
+### Créer un réseau Docker
+
+D'abord, créez un réseau pour que Keycloak et PostgreSQL puissent communiquer :
+
+```bash
+docker network create keycloak-network
+```
+
+### Démarrer le conteneur PostgreSQL
+
+```bash
+docker run -d --name postgres-keycloak \
+  --network keycloak-network \
+  -e POSTGRES_DB=keycloak \
+  -e POSTGRES_USER=keycloak \
+  -e POSTGRES_PASSWORD=keycloak_db_password \
+  -v keycloak-postgres-data:/var/lib/postgresql/data \
+  postgres:15
+```
+
+**PowerShell (Windows):**
+```powershell
+docker run -d --name postgres-keycloak `
+  --network keycloak-network `
+  -e POSTGRES_DB=keycloak `
+  -e POSTGRES_USER=keycloak `
+  -e POSTGRES_PASSWORD=keycloak_db_password `
+  -v keycloak-postgres-data:/var/lib/postgresql/data `
+  postgres:15
+```
+
+---
+
 ## 1. Installation et lancement de Keycloak
 
-### 1.1 Pull de l’image Keycloak
+### 1.1 Pull des images Docker
 
 ```bash
 docker pull quay.io/keycloak/keycloak
+docker pull postgres:15
 ```
 
-### 1.2 Lancement du conteneur Keycloak (mode dev)
+### 1.2 Lancement de Keycloak avec PostgreSQL
 
-#### 1.2.1 Création d'un volume pour keycloak:
+#### Option A: Avec PostgreSQL (RECOMMANDÉ - Production)
 
 ```bash
-docker volume create keycloak-data
+docker run -d --name keycloak-dev \
+  --network keycloak-network \
+  -p 8080:8080 \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+  -e KC_DB=postgres \
+  -e KC_DB_URL=jdbc:postgresql://postgres-keycloak:5432/keycloak \
+  -e KC_DB_USERNAME=keycloak \
+  -e KC_DB_PASSWORD=keycloak_db_password \
+  -v ${PWD}/imports:/opt/keycloak/data/import \
+  quay.io/keycloak/keycloak:latest \
+  start-dev --import-realm
 ```
-#### 1.2.2 Commande de lancement du conteneur pour Windows:
+
+**PowerShell (Windows):**
+```powershell
+docker run -d --name keycloak-dev `
+  --network keycloak-network `
+  -p 8080:8080 `
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin `
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin `
+  -e KC_DB=postgres `
+  -e KC_DB_URL=jdbc:postgresql://postgres-keycloak:5432/keycloak `
+  -e KC_DB_USERNAME=keycloak `
+  -e KC_DB_PASSWORD=keycloak_db_password `
+  -v ${PWD}/imports:/opt/keycloak/data/import `
+  quay.io/keycloak/keycloak:latest `
+  start-dev --import-realm
+```
+
+#### Option B: Sans PostgreSQL (DEV uniquement - données volatiles)
 
 ```bash
-docker run -d --name keycloak-dev -p 127.0.0.1:8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=<password> -e KEYCLOAK_DEFAULT_REALM=projetcis -v ${PWD}/imports:/opt/keycloak/data/import quay.io/keycloak/keycloak:latest start-dev --import-realm
+docker run -d --name keycloak-dev \
+  -p 8080:8080 \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+  -v ${PWD}/imports:/opt/keycloak/data/import \
+  quay.io/keycloak/keycloak:latest \
+  start-dev --import-realm
+```
+
+**PowerShell (Windows):**
+```powershell
+docker run -d --name keycloak-dev `
+  -p 8080:8080 `
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin `
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin `
+  -v ${PWD}/imports:/opt/keycloak/data/import `
+  quay.io/keycloak/keycloak:latest `
+  start-dev --import-realm
 ```
 
 ### 1.3 Accéder à Keycloak
